@@ -1,6 +1,6 @@
-"""prompt_lint 테스트 — 에이전트(Opus 4.6)가 만든 프롬프트를 칸 단위로 점검하는지 확인한다.
+"""prompt_lint 테스트 — 에이전트가 만든 프롬프트를 칸 단위로 점검하는지 확인한다.
 
-원칙: ✗는 고칠 방법이 분명한 것만. 오탐 ✗는 4.6이 멀쩡한 내용을 망가뜨리는 루프를 만든다.
+원칙: ✗는 고칠 방법이 분명한 것만. 오탐 ✗는 모델이 멀쩡한 내용을 망가뜨리는 루프를 만든다.
 
 실행: python3 -m unittest discover -s tests
 """
@@ -262,7 +262,7 @@ class Target(unittest.TestCase):
 
 
 class Verify(unittest.TestCase):
-    """검증 칸은 ✗를 내지 않는다 — 4.6이 CI 등에서 직접 확인한 명령을 망가뜨리지 않게"""
+    """검증 칸은 ✗를 내지 않는다 — 모델이 CI 등에서 직접 확인한 명령을 망가뜨리지 않게"""
 
     def setUp(self):
         self.d, self.root = make_repo(MONOREPO)
@@ -491,7 +491,7 @@ class Cli(unittest.TestCase):
 
 class SkillContract(unittest.TestCase):
     def test_skill_examples_pass_lint(self):
-        # SKILL.md 예시가 스스로 점검을 통과해야 4.6이 따라 해도 안전하다
+        # SKILL.md 예시가 스스로 점검을 통과해야 모델이 따라 해도 안전하다
         blocks = [b for b in re.findall(r"```\n(목표:.*?)```", SKILL_MD, re.S)
                   if "(무엇을, 왜" not in b]          # 템플릿 자체는 제외
         self.assertGreaterEqual(len(blocks), 2)

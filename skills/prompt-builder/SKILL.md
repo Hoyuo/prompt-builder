@@ -3,6 +3,7 @@ name: prompt-builder
 description: 사용자가 대충 쓴 작업 요청을 이 저장소를 확인해 실행용 프롬프트(목표·대상·완료 기준·검증·제약·가정)로 만들어 보여 주고, 승인받으면 그 프롬프트대로 작업한다. "프롬프트 만들어 줘", "프롬프트로 정리해 줘", "이 요청 제대로 된 지시로 바꿔 줘" 같은 요청에 쓴다. 이 저장소에서 할 코드·문서 작업을 정리할 때만 쓰고, 다른 AI에 넣을 프롬프트 문안(이미지 생성, 시스템 프롬프트 등)을 쓸 때는 쓰지 않는다.
 argument-hint: "<대충 쓴 요청>"
 triggers: ["user"]
+disable-model-invocation: true
 allowed-tools:
   - read
   - grep
@@ -35,9 +36,9 @@ $ARGUMENTS
 
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && \
-D=""; for p in .agents/skills/prompt-builder .devin/skills/prompt-builder .claude/skills/prompt-builder .github/skills/prompt-builder ~/.config/devin/skills/prompt-builder ~/.agents/skills/prompt-builder; do \
-  [ -f "$p/prompt_helper.py" ] && D="$p" && break; done; \
-if [ -n "$D" ]; then python3 "$D/prompt_helper.py" scan --text; else echo "prompt_helper.py 없음 — 1단계 건너뜀 (찾은 위치: $(pwd))"; fi <<'PROMPT_BUILDER_EOF'
+H=$(find . -maxdepth 4 -name node_modules -prune -o -type f -path '*/skills/prompt-builder/prompt_helper.py' -print 2>/dev/null | head -1); \
+[ -n "$H" ] || H=$(find "$HOME"/.[a-zA-Z]* -maxdepth 4 \( -name .cache -o -name node_modules -o -name .git -o -name .npm -o -name .gradle -o -name .m2 -o -name .cargo -o -name .rustup \) -prune -o -type f -path '*/skills/prompt-builder/prompt_helper.py' -print 2>/dev/null | head -1); \
+if [ -n "$H" ]; then python3 "$H" scan --text; else echo "prompt_helper.py 없음 — 1단계 건너뜀 (찾은 위치: $(pwd))"; fi <<'PROMPT_BUILDER_EOF'
 (요청 원문을 여기에 그대로)
 PROMPT_BUILDER_EOF
 ```
@@ -108,9 +109,9 @@ PROMPT_BUILDER_EOF
 
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && \
-D=""; for p in .agents/skills/prompt-builder .devin/skills/prompt-builder .claude/skills/prompt-builder .github/skills/prompt-builder ~/.config/devin/skills/prompt-builder ~/.agents/skills/prompt-builder; do \
-  [ -f "$p/prompt_lint.py" ] && D="$p" && break; done; \
-if [ -n "$D" ]; then python3 "$D/prompt_lint.py"; else echo "prompt_lint.py 없음 — 아래 목록으로 직접 점검 (찾은 위치: $(pwd))"; fi <<'PROMPT_BUILDER_EOF'
+L=$(find . -maxdepth 4 -name node_modules -prune -o -type f -path '*/skills/prompt-builder/prompt_lint.py' -print 2>/dev/null | head -1); \
+[ -n "$L" ] || L=$(find "$HOME"/.[a-zA-Z]* -maxdepth 4 \( -name .cache -o -name node_modules -o -name .git -o -name .npm -o -name .gradle -o -name .m2 -o -name .cargo -o -name .rustup \) -prune -o -type f -path '*/skills/prompt-builder/prompt_lint.py' -print 2>/dev/null | head -1); \
+if [ -n "$L" ]; then python3 "$L"; else echo "prompt_lint.py 없음 — 아래 목록으로 직접 점검 (찾은 위치: $(pwd))"; fi <<'PROMPT_BUILDER_EOF'
 (만든 프롬프트 전체를 여기에 그대로)
 PROMPT_BUILDER_EOF
 ```
