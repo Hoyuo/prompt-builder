@@ -1119,7 +1119,7 @@ class ReviewFixes2(unittest.TestCase):
         out = pl.question_to_text(w)
         self.assertTrue(out.startswith("질문 점검\n  △ 보기가 없습니다"))
         self.assertTrue(out.endswith("→ △를 읽고 맞으면 질문을 고치세요(다시 점검하지 않습니다). 답은 첫 줄에 '먼저 여쭤볼게요'를 쓰고 "
-                                     "그다음에 질문과 보기만 쓰세요. 그 앞뒤에 저장소를 살펴본 이야기나 묻는 이유를 쓰지 않습니다"))
+                                     "그다음에 질문과 보기만 쓰세요. 그 앞뒤에 저장소를 살펴본 이야기, 묻는 이유, 점검 결과나 고친 이야기를 쓰지 않습니다"))
 
     def test_question_cli(self):
         run = lambda data: subprocess.run([sys.executable, "-B", SCRIPT, "--question"], input=data, capture_output=True,
@@ -1261,7 +1261,7 @@ class Cli(unittest.TestCase):
             ok = self.run_cli("--root", str(root), stdin=GOOD)
             self.assertEqual(ok.returncode, 0, ok.stderr)
             self.assertIn("판정: 통과", ok.stdout)
-            self.assertIn("→ 점검 끝. 사용자에게는 점검 이야기를 하지 말고 '이렇게 이해했습니다'로 시작하는 답을 바로 쓰세요",
+            self.assertIn("→ 고칠 것이 있으면 말없이 고친 답을 바로 쓰세요. 다음 글의 첫 줄은 '이렇게 이해했습니다'입니다.",
                           ok.stdout)
             self.assertNotIn("보여 줘도 됩니다", ok.stdout)
             bad = self.run_cli("--root", str(root), stdin=GOOD.replace("종료되지 않는다", "잘 동작한다"))
@@ -1326,7 +1326,7 @@ class SkillContract(unittest.TestCase):
     def test_lint_command_in_skill_runs(self):
         bash_blocks = re.findall(r"```bash\n(.*?)```", SKILL_MD, re.S)
         cmd = next(b for b in bash_blocks if "prompt_lint.py" in b and "--question" not in b)
-        cmd = cmd.replace("(만든 프롬프트 전체를 여기에 그대로)", GOOD)
+        cmd = cmd.replace("(보여 줄 답 전체를 여기에 그대로 — 프롬프트는 코드 블록 안에)", GOOD)
         d, root = make_repo()
         with d:
             (root / ".git").rmdir()

@@ -66,27 +66,57 @@ LABEL_VARIANTS = {
     "참고": r"참고(?:\s*자료)?",
     "작업 규칙": r"작업\s*규칙|실행\s*규칙",
 }
+# 영어 형식의 칸 이름 (SKILL.md '영어 요청일 때'). 표준 이름 → 그 변형
+LABELS_EN = {
+    "요청 원문": "Original request", "상황": "Situation", "목표": "Goal", "대상": "Targets",
+    "완료 기준": "Done when", "검증": "Verify", "제약": "Constraints", "가정": "Assumptions",
+    "참고": "References", "작업 규칙": "Work rules",
+}
+LABEL_VARIANTS_EN = {
+    "요청 원문": r"original\s+request|original\s+ask",
+    "상황": r"situation|context|background",
+    "목표": r"goal|objective",
+    "대상": r"targets?|target\s+files?|files\s+to\s+change",
+    "완료 기준": r"done\s+when|done\s+criteria|acceptance\s+criteria|definition\s+of\s+done",
+    "검증": r"verify|verification|verify\s+command|validation",
+    "제약": r"constraints?",
+    "가정": r"assumptions?",
+    "참고": r"references?",
+    "작업 규칙": r"work(ing)?\s+rules|rules\s+of\s+work",
+}
+# 영어 변형을 더한 표 (영어 프롬프트에서만 쓴다 — 한국어 프롬프트 안의 "Request: POST /api/login" 같은 줄이 칸이 되지 않게)
+LABEL_VARIANTS_ALL = {_k: LABEL_VARIANTS[_k] + "|(?i:" + _v + ")" for _k, _v in LABEL_VARIANTS_EN.items()}
 
-UNVERIFIED_MARK = re.compile(r"\(\s*확인\s*필요\s*\)")
-NEW_FILE_MARK = re.compile(r"\(\s*(새\s*(파일|폴더)|새로\s*만듦|새로\s*만들|신규(\s*(파일|폴더))?)\s*\)|[—\-]\s*새\s*(파일|폴더)")
-SOURCE_RE = re.compile(r"출처\s*[:：]\s*`?([^\s)`,]+)`?")
+UNVERIFIED_MARK = re.compile(r"\(\s*(확인\s*필요|(?i:needs?\s+check(ing)?|unverified|to\s+be\s+confirmed))\s*\)")
+NEW_FILE_MARK = re.compile(r"\(\s*(새\s*(파일|폴더)|새로\s*만듦|새로\s*만들|신규(\s*(파일|폴더))?|(?i:new(\s+(file|folder))?))\s*\)"
+                           r"|[—\-]\s*(새\s*(파일|폴더)|(?i:new\s+(file|folder)))")
+SOURCE_RE = re.compile(r"(?:출처|(?i:source))\s*[:：]\s*`?([^\s)`,]+)`?")
 # 머리줄은 들여쓰지 않은 줄이고, "프롬프트 n/m" 뒤에는 꾸밈(콜론·대시·괄호)만 올 수 있다 (뒤에 문장이 이어지면 본문)
 PROMPT_HEADER_RE = re.compile(
-    r"^(?:#+\s*\**\s*\[?|\**\s*\[)프롬프트\s*\d+\s*/\s*\d+\s*\]?\**.*$"      # '## 프롬프트 1/2', '[프롬프트 1/2] 제목'
-    r"|^\**\s*프롬프트\s*\d+\s*/\s*\d+\s*\]?\**(\s*[:：—\-.(\[].*)?\s*$")
-NONE_MARK = re.compile(r"^\s*\(?\s*(없음|해당\s*없음|요청[^)]{0,300}없음)[^)]{0,300}\)?\s*$")   # 길이를 묶어 되짚기가 길어지지 않게
-SOURCE_MARK = re.compile(r"(\.md|\.ya?ml|\.json|README|AGENTS|CONTRIBUTING|요청|사용자|문서|CI|설정)\s*[—:\-]|출처\s*[:：]|\(\s*요청(\s*원문)?\s*\)")
+    r"^(?:#+\s*\**\s*\[?|\**\s*\[)(?:프롬프트|[Pp]rompt)\s*\d+\s*/\s*\d+\s*\]?\**.*$"      # '## 프롬프트 1/2', '[Prompt 1/2] 제목'
+    r"|^\**\s*(?:프롬프트|[Pp]rompt)\s*\d+\s*/\s*\d+\s*\]?\**(\s*[:：—\-.(\[].*)?\s*$")
+NONE_MARK = re.compile(r"^\s*\(?\s*(없음|해당\s*없음|요청[^)]{0,300}없음)[^)]{0,300}\)?\s*$"
+                       r"|^\s*(?i:none|n/a|not\s+applicable)\s*\.?\s*$|^\s*\(\s*(?i:none)(?![A-Za-z])[^)]{0,300}\)\s*$")   # 길이를 묶어 되짚기가 길어지지 않게
+SOURCE_MARK = re.compile(r"(\.md|\.ya?ml|\.json|README|AGENTS|CONTRIBUTING|요청|사용자|문서|CI|설정)\s*[—:\-]"
+                         r"|(?<![A-Za-z\-])(?i:request|user|docs?|config)\s*[—:]"
+                         r"|(출처|(?i:source))\s*[:：]|\(\s*(요청(\s*원문)?|(?i:request))\s*\)")
 
 # 완료 기준 — ✗: 확인할 방법이 없는 것이 분명한 표현
 UNOBSERVABLE_STRONG = [
     r"잘\s*(동작|작동|된다|됨|돌아)", r"(?<!비)정상\s*(적으로|동작|작동)",
     r"문제\s*(없이|없음|없다|없는)(?!\s*(이|가|으로|로)?\s*(출력|표시|나온|나와|뜬|뜨))",
     r"이상\s*(없이|없음|없다)", r"올바르게\s*(동작|작동|처리|된다)",
+    # 영어
+    ph.L + r"(works?|working)\s+(correctly|properly|fine|as\s+expected|as\s+intended)" + ph.R,
+    ph.L + r"without\s+(any\s+)?(problems|issues)" + ph.R + r"(?!\s+(message|shown|displayed|label|banner))",
 ]
 # 완료 기준 — △: 맥락에 따라 괜찮을 수도 있는 표현
 UNOBSERVABLE_WEAK = [
     r"제대로", r"깔끔", r"완벽", r"적절", r"원활", r"안정적", r"효율적", r"향상",
     r"개선\s*(된다|됨)", r"좋아(진다|짐)", r"버그가\s*(수정|해결)\s*(된다|됨)",
+    # 영어
+    ph.L + r"(properly|correctly|cleanly?|perfect(ly)?|appropriate(ly)?|smooth(ly)?|stabl[ey]|efficient(ly)?|"
+           r"improved?|better|normally|without\s+(any\s+)?errors|(bug|issue)\s+is\s+(fixed|resolved))" + ph.R,
 ]
 
 # 대상 칸에서 경로로 인정하는 확장자 (그 밖의 "a.b"는 코드 식별자로 본다)
@@ -100,21 +130,28 @@ MAX_GOAL_LEN = 200
 MAX_TARGETS = 3
 
 # SKILL.md 규칙 2의 자리표시자. 제약에 글자 그대로 남아 있으면 ✗ (예시 문구를 그대로 베낀 것)
-CONSTRAINT_PLACEHOLDERS = ("(그 문서에 적힌 규칙)", "(요청에 있던 문장 그대로)")
+CONSTRAINT_PLACEHOLDERS = ("(그 문서에 적힌 규칙)", "(요청에 있던 문장 그대로)",
+                           "(the rule written in that doc)", "(the exact sentence from the request)")
 
 # SKILL.md 4단계 형식·설명의 완료 기준 자리표시자. 완료 기준 줄에 들어 있으면 ✗
 CRITERIA_PLACEHOLDERS = ("(사용자가 보게 될 결과)", "(이 기준을 무엇으로 확인하는지)", "(결과 2)", "(확인 방법)",
-                         "(테스트 파일 경로)", "(검증 명령)", "(어디에서 무엇을 해 보면 되는지)")
+                         "(테스트 파일 경로)", "(검증 명령)", "(어디에서 무엇을 해 보면 되는지)",
+                         "(what the user will see)", "(how this criterion is checked)", "(result 2)", "(how to check)",
+                         "(test file path)", "(verify command)", "(where to do what)")
 
 # 완료 기준 줄의 확인 방법 표시 ("… — 확인: 기존 테스트 tests/test_a.py")
-CHECK_MARK_RE = re.compile(r"확인\s*(방법)?\s*[:：]")
+CHECK_MARK_RE = re.compile(r"확인\s*(방법)?\s*[:：]|(?<![A-Za-z])(?i:check(ed)?(\s+(by|with))?)\s*[:：]")
 # "명령이 통과한다"류 — 다른 것을 망가뜨리지 않았다는 줄. 확인 표시가 없어도 되지만 이것만으로는 부족하다
 QUANTITY_ABOVE_RE = re.compile(r"(\d|[개번명회건곳])\s*이상")   # "두 개 이상 없다"의 이상은 수량이다
 # 통과류 줄. "통과하고 …", "통과한 뒤 …"처럼 뒤에 다른 서술이 이어지면 아니다 (뒤의 괄호 설명은 괜찮다)
 PASS_RE = re.compile(r"(검증\s*명령|테스트|빌드|린트|타입\s*검사|typecheck|lint|test|build)[^\n]*"
-                     r"통과(?!하고|하며|하면|하면서|해서|하여|한\s*(뒤|다음|후))", re.I)
+                     r"(통과(?!하고|하며|하면|하면서|해서|하여|한\s*(뒤|다음|후))"
+                     r"|(?<![A-Za-z])pass(es|ing)?(?![A-Za-z])(?!\s*(and|,|then|before|after|while)(?![A-Za-z])))", re.I)
 # 확인에 "테스트를 추가"라고 썼으면 대상에 테스트 파일이 있어야 한다 (어디에 넣을지 정해 두게)
-TEST_ADD_RE = re.compile(r"확인\s*(방법)?\s*[:：][^\n]*테스트를?\s*(하나\s*)?(추가|작성|만들)")
+TEST_ADD_RE = re.compile(r"확인\s*(방법)?\s*[:：][^\n]*테스트를?\s*(하나\s*)?(추가|작성|만들)"
+                         r"|(?i:check)\s*[:：][^\n]*(?i:(add|write)(ing)?\s+(a\s+|new\s+)*tests?)(?![A-Za-z])")
+# "사람이 직접" 확인 (영어 형식은 "manual —")
+MANUAL_RE = re.compile(r"사람이\s*직접|(?i:manual(ly)?|by\s+hand)(?![A-Za-z])")
 TEST_DIRS = {"test", "tests", "spec", "specs", "__tests__", "e2e", "cypress"}
 TEST_NAME_RE = re.compile(r"^test_|\.(test|spec|cy)\.|[_\-]test\.|(Test|Tests|Spec)\.[A-Za-z0-9]+$")
 
@@ -127,7 +164,8 @@ def _has_test_path(target):
             return True
     return False
 # "사람이 직접" 확인은 사용자가 화면에서 할 수 있는 일이어야 한다 — 개발 도구를 쓰게 하면 △
-DEV_TOOL_RE = re.compile(r"개발자\s*도구|네트워크\s*탭|devtools|network\s*tab|curl", re.I)
+DEV_TOOL_RE = re.compile(r"개발자\s*도구|네트워크\s*탭|devtools|network\s*tab|curl|(코드|소스)(을|를)?\s*열어|소스\s*파일|"
+                         r"파일을\s*열어[^\n]*(코드|함수|선언|변수)|open\s+the\s+(code|source)|read\s+the\s+code", re.I)
 
 # 상황 칸의 코드 표기 (상황은 사용자가 쓰는 말로 쓴다). 따옴표 안 화면 문구는 빼고 본다.
 # 한글도 \w에 들므로 영문·숫자로만 본다 ("대문자/소문자", "검색(" 같은 말이 걸리지 않게)
@@ -154,37 +192,64 @@ ROUTE_DIRS = ("pages/", "app/", "routes/", "src/pages/", "src/app/", "src/routes
 TECH_TERMS = [
     ph.L + r"API" + ph.R, r"호출", r"함수", r"컴포넌트", r"렌더링", r"엔드포인트", r"쿼리", r"파라미터",
     r"병렬", r"순차", r"리팩터링", r"리팩토링", r"변수", r"예외", r"타입", r"콜백", r"비동기",
-]
+    # 영어
+] + [ph.L + w + ph.R for w in (                 # 영어 — 낱말마다 따로 잡아 모두 알린다
+    r"functions?", r"components?", r"render(s|ed|ing)?", r"endpoints?", r"quer(y|ies)", r"param(eter)?s?",
+    r"callbacks?", r"async(hronous)?", r"variables?", r"exceptions?", r"refactor(ing)?", r"props?", r"hooks?",
+    r"router", r"routing", r"handlers?", r"state\s+variables?")]
+# null·undefined는 화면에 그대로 보이는 증상일 수 있어("the title shows undefined") 개발 용어로 치지 않는다
 
 # 요청에 없는 서버 연결 — 사용자가 말하지 않은 서버·백엔드·API를 상황·목표·완료 기준·가정이 끌어들이면 △
-SERVER_TERM_RE = re.compile(r"서버|백엔드|" + ph.L + r"API" + ph.R, re.I)
+SERVER_TERM_RE = re.compile(r"서버|백엔드|" + ph.L + r"(API|servers?|backend|back-end)" + ph.R, re.I)
 
 # 사용자에게 보낼 질문의 개발 용어 (--question). 상황 칸의 개발 용어에 질문에서 자주 나오는 말을 더한다
-QUESTION_TERMS = TECH_TERMS + [r"프런트엔드", r"프론트엔드", r"백엔드", r"호스팅", r"의존성", r"스키마", r"플랫폼"]
+QUESTION_TERMS = TECH_TERMS + [r"프런트엔드", r"프론트엔드", r"백엔드", r"호스팅", r"의존성", r"스키마", r"플랫폼",
+] + [ph.L + w + ph.R for w in (r"front-?end", r"back-?end", r"hosting", r"dependenc(y|ies)", r"schema",
+                                    r"platform", r"database", r"DB")]
+# 사용자가 모를 기술 서비스·도구 이름 (질문의 보기나 답에 나오면 △). 사용자는 "어디에 올리는지"를 이 이름으로 고를 수 없다
+SERVICE_TERMS = [ph.L + w + ph.R for w in (
+    r"Vercel", r"Netlify", r"AWS", r"S3", r"CloudFront", r"GCP", r"Azure", r"Firebase", r"Heroku", r"Cloudflare",
+    r"Supabase", r"GitHub\s+Pages", r"Docker", r"Kubernetes", r"k8s", r"nginx", r"PostgreSQL", r"Postgres", r"MySQL",
+    r"Redis", r"MongoDB", r"HTML", r"CSS", r"JS", r"JSON", r"SSR", r"SPA", r"CDN", r"CI/CD")] + [
+    r"정적\s*파일", r"서버리스", r"빌드(?!하면|해도)"]
+QUESTION_TERMS = QUESTION_TERMS + SERVICE_TERMS
 MAX_QUESTIONS = 2
-QUESTION_LAST_OK = ("→ 점검 끝. 답은 첫 줄에 '먼저 여쭤볼게요'를 쓰고 그다음에 이 질문과 보기만 쓰세요. "
+QUESTION_LAST_OK = ("→ 점검 끝. 답은 첫 줄에 '{ask}'를 쓰고 그다음에 이 질문과 보기만 쓰세요. "
                     "그 앞뒤에 저장소를 살펴본 이야기나 묻는 이유를 쓰지 않습니다")
-QUESTION_LAST_WARN = ("→ △를 읽고 맞으면 질문을 고치세요(다시 점검하지 않습니다). 답은 첫 줄에 '먼저 여쭤볼게요'를 쓰고 "
-                      "그다음에 질문과 보기만 쓰세요. 그 앞뒤에 저장소를 살펴본 이야기나 묻는 이유를 쓰지 않습니다")
+QUESTION_LAST_WARN = ("→ △를 읽고 맞으면 질문을 고치세요(다시 점검하지 않습니다). 답은 첫 줄에 '{ask}'를 쓰고 "
+                      "그다음에 질문과 보기만 쓰세요. 그 앞뒤에 저장소를 살펴본 이야기, 묻는 이유, 점검 결과나 고친 이야기를 쓰지 않습니다")
+# 답의 첫 줄 문구 (SKILL.md 3·5단계, 영어는 '영어 요청일 때')
+PHRASES = {"ko": {"ask": "먼저 여쭤볼게요", "understood": "이렇게 이해했습니다", "unverified": "확인하지 못한 것"},
+           "en": {"ask": "Quick question first", "understood": "Here's what I understood", "unverified": "Couldn't verify"}}
 
 # 항목 전체가 이름 하나인지 볼 때 떼는 꼬리 ("src 폴더", "tests 디렉터리 전체")
-DIR_SUFFIX_RE = re.compile(r"\s*(폴더|디렉터리|디렉토리)(\s*(전체|아래))?\s*$")
+DIR_SUFFIX_RE = re.compile(r"\s*(폴더|디렉터리|디렉토리|(?i:folder|directory|dir))(\s*(전체|아래))?\s*$")
 SINGLE_NAME_RE = re.compile(r"[\w.\-]+(?:/[\w.\-]+)*/?")
 
 # ─────────────────────────────────────────────────────────────
 # 파싱
 # ─────────────────────────────────────────────────────────────
 
-_ALT = "|".join(f"(?P<g{i}>{p})" for i, p in enumerate(LABEL_VARIANTS.values()))
 _NAMES = list(LABEL_VARIANTS.keys())
-# 들여쓰지 않은 줄만 칸으로 본다 ("  - 대상: ..."처럼 가정 안의 불릿은 칸이 아님)
-LABEL_RE = re.compile(r"^(?:[-*]\s*|#{1,4}\s*)?\**(?:" + _ALT + r")\**\s*(?:[:：]\s*\**|$)\s*(?P<val>.*)$")
-CANONICAL_RE = re.compile(r"^(?:[-*]\s*)?(요청 원문|상황|목표|대상|완료 기준|검증|제약|가정|참고|작업 규칙)\s*[:：]")
 
 
-def _label(line):
-    """(칸 이름, 값, 원문, 불릿 여부) 또는 None"""
-    m = LABEL_RE.match(line)
+def _label_re(table):
+    alt = "|".join(f"(?P<g{i}>{table[n]})" for i, n in enumerate(_NAMES))
+    # 들여쓰지 않은 줄만 칸으로 본다 ("  - 대상: ..."처럼 가정 안의 불릿은 칸이 아님)
+    return re.compile(r"^(?:[-*]\s*|#{1,4}\s*)?\**(?:" + alt + r")\**\s*(?:[:：]\s*\**|$)\s*(?P<val>.*)$")
+
+
+LABEL_RES = {"ko": _label_re(LABEL_VARIANTS), "en": _label_re(LABEL_VARIANTS_ALL)}
+LABEL_RE = LABEL_RES["ko"]
+CANONICAL_RE = re.compile(r"^(?:[-*]\s*)?(요청 원문|상황|목표|대상|완료 기준|검증|제약|가정|참고|작업 규칙|"
+                          + "|".join(LABELS_EN.values()) + r")\s*[:：]")
+CANONICAL_EN_RE = re.compile(r"^(?:[-*]\s*)?\**(" + "|".join(LABELS_EN.values()) + r")\**\s*[:：]")
+CANONICAL_KO_RE = re.compile(r"^(?:[-*]\s*)?\**(요청 원문|상황|목표|대상|완료 기준|검증|제약|가정|참고|작업 규칙)\**\s*[:：]")
+
+
+def _label(line, lang="ko"):
+    """(칸 이름, 값, 원문, 불릿 여부) 또는 None. 영어 칸 이름 변형은 lang이 'en'일 때만 인식한다"""
+    m = LABEL_RES[lang].match(line)
     if not m:
         return None
     for i, name in enumerate(_NAMES):
@@ -198,22 +263,24 @@ def _label(line):
 SPLIT_MIN_FIELDS = 4
 
 
-def split_prompts(text):
+def split_prompts(text, lang=None):
     """프롬프트를 나눈다. '프롬프트 1/3' 머리줄은 무조건 나누는 곳이고, 그 밖에는 형식의 첫 칸인
     '요청 원문'이 칸 SPLIT_MIN_FIELDS개가 모인 뒤 다시 나오면 나눈다. 모델이 '요청 원문'을 빠뜨린
     경우를 위해, 이미 나온 '목표'부터 칸이 SPLIT_MIN_FIELDS개 이상 모인 뒤 '목표'가 다시 나와도 나눈다.
     코드 블록 표시(```)는 무시"""
     lines = [l for l in (text or "").splitlines() if not l.strip().startswith("```")]
+    lang = lang or prompt_lang(text or "")
+    lab_of = lambda l: _label(l, lang)  # noqa: E731
     blocks, cur = [], []
     for line in lines:
         if PROMPT_HEADER_RE.match(line):          # "프롬프트 2/3 — 화면" 머리줄은 무조건 나누는 곳
-            if any(_label(l) for l in cur):
+            if any(lab_of(l) for l in cur):
                 blocks.append(cur)
             cur = []
             continue
-        lab = _label(line)
+        lab = lab_of(line)
         if lab and lab[0] in ("요청 원문", "목표"):
-            names = [x[0] for x in map(_label, cur) if x]
+            names = [x[0] for x in map(lab_of, cur) if x]
             if lab[0] == "목표":
                 names = names[names.index("목표"):] if "목표" in names else []
             elif "요청 원문" not in names:      # 칸 순서가 바뀐 것이지 새 프롬프트가 아니다
@@ -224,17 +291,18 @@ def split_prompts(text):
         cur.append(line)
     if cur:
         blocks.append(cur)
-    return ["\n".join(b) for b in blocks if any(_label(l) for l in b)]
+    return ["\n".join(b) for b in blocks if any(lab_of(l) for l in b)]
 
 
-def parse(prompt):
+def parse(prompt, lang=None):
     """({칸 이름: 값}, [표준과 다르게 쓴 칸 이름 원문])
 
     이미 나온 칸 이름이 다시 나오면 앞 칸에 이어지는 내용으로 본다(가정 안의 "- 검증: ..." 등).
     """
     fields, variants, current = {}, [], None
+    lang = lang or prompt_lang(prompt)
     for line in prompt.splitlines():
-        lab = _label(line)
+        lab = _label(line, lang)
         if lab:
             name, val, raw, bulleted = lab
             if name in fields:
@@ -249,20 +317,44 @@ def parse(prompt):
     return fields, variants
 
 
+def prompt_lang(prompt):
+    """프롬프트의 형식 언어. 표준 칸 이름(Goal:, 목표: …)을 세어 영어가 더 많으면 'en'.
+    표준 이름이 하나도 없으면 영어 변형(Acceptance criteria: 등)이 한국어 칸보다 많을 때 'en'"""
+    lines = [l.strip() for l in (prompt or "").splitlines()]
+    en = sum(1 for l in lines if CANONICAL_EN_RE.match(l))
+    ko = sum(1 for l in lines if CANONICAL_KO_RE.match(l))
+    if en or ko:
+        return "en" if en > ko else "ko"
+    en_var = sum(1 for l in lines if re.match(r"^(?:[-*]\s*|#{1,4}\s*)?\**[A-Za-z]", l) and _label(l, "en"))
+    ko_var = sum(1 for l in lines if _label(l, "ko"))
+    return "en" if en_var > ko_var else "ko"
+
+
+def text_lang(text):
+    """글의 언어: 한글이 한 글자라도 있으면 'ko' (질문 점검용)"""
+    return "ko" if re.search(r"[가-힣]", text or "") else "en"
+
+
+def _disp(name, lang):
+    """칸 이름을 프롬프트 언어로"""
+    return LABELS_EN[name] if lang == "en" else name
+
+
 def _items(value):
     """쉼표·줄·목록 항목으로 나눈다"""
     out = []
     for line in value.splitlines():
         line = re.sub(r"^\s*[-*•]\s*|^\s*\d+[.)]\s*", "", line).strip()
         # 괄호·따옴표 안의 쉼표에서는 나누지 않는다 ("Code review, PR review")
-        masked = re.sub(r"\"[^\"]*\"|'[^']*'|“[^”]*”|\([^)]*\)", lambda m: m.group(0).replace(",", "\0"), line)
+        masked = re.sub(r"\"[^\"]*\"|(?<![A-Za-z])'(?:[^'\n]|(?<=[A-Za-z])'(?=[A-Za-z]))*'(?![A-Za-z])|“[^”]*”|\([^)]*\)", lambda m: m.group(0).replace(",", "\0"), line)
         out += [p.replace("\0", ",").strip() for p in masked.split(",") if p.strip()]
     return out
 
 
 # 작업 규칙 문장은 자리표시자가 아니므로 그 앞부분의 괄호만 쓴다
 TEMPLATE_PLACEHOLDERS = [re.escape(m.group(0))
-                         for m in re.finditer(r"\([^)\n]*\)", ph.TEMPLATE.split("작업 규칙:")[0])]
+                         for t in (ph.TEMPLATE.split("작업 규칙:")[0], ph.TEMPLATE_EN.split("Work rules:")[0])
+                         for m in re.finditer(r"\([^)\n]*\)", t)]
 
 
 def _is_placeholder(value):
@@ -270,9 +362,13 @@ def _is_placeholder(value):
     return any(re.fullmatch(p, v) for p in TEMPLATE_PLACEHOLDERS)
 
 
+# 따옴표로 묶인 말. 영어 낱말 안의 아포스트로피(don't, user's)는 따옴표가 아니다
+QUOTE_RE = r"(?<![A-Za-z])'(?:[^'\n]|(?<=[A-Za-z])'(?=[A-Za-z]))*'(?![A-Za-z])|\"[^\"]*\"|`[^`]*`|‘[^’]*’|“[^”]*”|「[^」]*」"
+
+
 def _strip_quotes(text):
     """인용한 화면 문구·코드는 표현 검사에서 뺀다"""
-    return re.sub(r"'[^']*'|\"[^\"]*\"|`[^`]*`|‘[^’]*’|“[^”]*”|「[^」]*」", " ", text)
+    return re.sub(QUOTE_RE, " ", text)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -431,8 +527,9 @@ def _count_once(cands, root):
     return [c for c in cands if not ((c.endswith("/") or (root / c).is_dir()) and any(holds(c, o) for o in cands))]
 
 
-def check_target(target, root):
+def check_target(target, root, lang="ko"):
     errors, warnings = [], []
+    new_mark, unv_mark = ("(new file)", "(needs check)") if lang == "en" else ("(새 파일)", "(확인 필요)")
     items = _items(target)
     any_path = False
     listed = set()
@@ -479,7 +576,7 @@ def check_target(target, root):
                 continue
             if m["exists"]:
                 if new_file and m["found"] == [m["mention"]]:
-                    warnings.append(f"'{m['mention']}'은(는) 이미 있는 파일인데 (새 파일)이 붙어 있습니다")
+                    warnings.append(f"'{m['mention']}'은(는) 이미 있는 파일인데 {new_mark}이 붙어 있습니다")
                 elif len(m["found"]) > 1 and m["found"] != [m["mention"]]:
                     warnings.append(f"대상 '{m['mention']}'에 해당하는 파일이 여럿입니다: {', '.join(m['found'])}")
                 continue
@@ -496,9 +593,9 @@ def check_target(target, root):
                 warnings.append(f"대상의 '{m['mention']}'은(는) 저장소에 없습니다. 파일 이름이라면 경로를 확인하세요")
                 continue
             errors.append(f"대상 경로가 저장소에 없습니다: {m['mention']} — 경로를 고치거나, 새로 만들 파일이면 "
-                          f"'(새 파일)', 확인 못 했으면 '(확인 필요)'를 그 경로 뒤에 붙이세요")
+                          f"'{new_mark}', 확인 못 했으면 '{unv_mark}'를 그 경로 뒤에 붙이세요")
     if not any_path and not UNVERIFIED_MARK.search(target):
-        errors.append("대상에 파일·폴더 경로가 없습니다. 경로를 쓰거나 (확인 필요)를 붙이세요")
+        errors.append(f"대상에 파일·폴더 경로가 없습니다. 경로를 쓰거나 {unv_mark}를 붙이세요")
     if len(listed) > MAX_TARGETS:
         warnings.append(f"대상이 {len(listed)}개입니다. 사용자가 짚은 범위가 맞는지 보세요. 요청이 고르지 않은 후보를 모두 넣은 것이라면 "
                         f"프롬프트를 보여 주지 않고 어느 것부터 할지 묻습니다(이미 두 차례 물었다면 가장 작은 것 하나만 남기고 "
@@ -581,7 +678,7 @@ def _cut_korean(p):
 def _command_parts(value, root):
     """검증 칸에서 [(명령, 출처 경로 또는 None)]을 뽑는다. 출처는 그 명령이 든 조각에만 적용한다"""
     # "(확인 필요) — 저장소에 tests/에는 …" 같은 설명은 명령이 아니다
-    text = re.sub(r"\(\s*확인\s*필요\s*\)\s*[—\-:：][^\n]*", " ", value)
+    text = re.sub("(?:" + UNVERIFIED_MARK.pattern + r")\s*[—\-:：][^\n]*", " ", value)
     text = UNVERIFIED_MARK.sub(" ", text)
     text = re.sub(r"(^|\s)\d+[.)]\s", "\n", " " + text)         # "1) a 2) b"
     segments = re.split(r"[,\n;]|\s\+\s|&&|→|->", text)
@@ -642,8 +739,27 @@ def _source_ok(src, cmd, root):
     return False, f"출처 '{src}'에 '{cmd}'가 없습니다"
 
 
-def check_verify(verify, target, root):
+def _script_bodies(dirs):
+    """package.json scripts의 {본문: 러너 명령} (본문을 명령으로 옮겨 쓴 것을 알아보려고)"""
+    out = {}
+    for d in dirs:
+        try:
+            data = json.loads(ph._read(d / "package.json") or "{}")
+        except (ValueError, OSError):
+            continue
+        scripts = data.get("scripts") if isinstance(data, dict) else None
+        if isinstance(scripts, dict):
+            runner = ph._pkg_runner(d).split()[0]
+            for k, v in scripts.items():
+                if isinstance(v, str) and v.strip():
+                    out[" ".join(v.split())] = f"{runner} test" if k == "test" else f"{runner} run {k}"
+    return out
+
+
+def check_verify(verify, target, root, lang="ko"):
     warnings = []
+    src_hint = "(source: 그 파일 경로)" if lang == "en" else "(출처: 그 파일 경로)"
+    unv = "(needs check)" if lang == "en" else "(확인 필요)"
     parts = _command_parts(verify, root)
     if UNVERIFIED_MARK.search(verify) and not parts:
         return [], []
@@ -652,10 +768,15 @@ def check_verify(verify, target, root):
     known = [c["cmd"] for c in ph.detect_verify_commands(root, targets)] + _script_commands(root, dirs)
     known_norm = sorted({_norm_cmd(k) for k in known}, key=len, reverse=True)
     if not parts:
-        warnings.append("검증에 실행할 명령이 없습니다. 확인 방법이 없다면 (확인 필요)와 함께 무엇으로 확인할지 쓰세요")
+        warnings.append(f"검증에 실행할 명령이 없습니다. 확인 방법이 없다면 {unv}와 함께 무엇으로 확인할지 쓰세요")
         return [], warnings
     hint = f" (찾은 후보: {', '.join(sorted(set(known)))})" if known else ""
+    bodies = _script_bodies(dirs)
     for cmd, src in parts:
+        if " ".join(cmd.split()) in bodies:          # package.json 스크립트 본문을 그대로 옮긴 것 ("vitest run")
+            warnings.append(f"검증 명령 '{cmd}'은(는) package.json 스크립트의 내용입니다. 스크립트 이름 '{bodies[' '.join(cmd.split())]}'로 쓰세요"
+                            f"(그 도구가 따로 설치돼 있지 않으면 내용 그대로는 돌지 않습니다)")
+            continue
         n = _norm_cmd(cmd)
         exact = n in known_norm
         prefix = next((k for k in known_norm if n.startswith(k + " ")), None)
@@ -672,7 +793,7 @@ def check_verify(verify, target, root):
             continue
         why = src_msg or "저장소에서 찾은 후보에 없습니다"
         warnings.append(f"검증 명령 '{cmd}': {why}{hint}. 저장소 파일(CI 설정 등)에 있는 명령이면 "
-                        f"그 명령 바로 뒤에 '(출처: 그 파일 경로)'를 붙이세요(명령마다 따로)")
+                        f"그 명령 바로 뒤에 '{src_hint}'를 붙이세요(명령마다 따로)")
     return [], warnings
 
 
@@ -689,7 +810,7 @@ def _criteria_items(criteria):
     if not any(BULLET_RE.match(l) for l in lines):
         return lines
     if (not BULLET_RE.match(lines[0]) and not CHECK_MARK_RE.search(lines[0])
-            and (re.search(r"[:：]$", lines[0]) or re.search(r"아래|다음", lines[0]))):
+            and (re.search(r"[:：]$", lines[0]) or re.search(r"아래|다음|(?i:following|below)", lines[0]))):
         lines = lines[1:]                        # "아래 두 가지"처럼 목록을 소개하는 말은 기준이 아니다
     items = []
     for l in lines:
@@ -709,8 +830,11 @@ def _split_check(item):
     return body, item[m.end():].strip()
 
 
-def check_criteria(criteria):
+def check_criteria(criteria, lang="ko"):
     """(오류, 경고, 확인 앞부분 목록)"""
+    pairs = []
+    mark = "— check: …" if lang == "en" else "— 확인: …"
+    kinds = "existing test / add a test / manual" if lang == "en" else "기존 테스트 / 테스트 추가 / 사람이 직접"
     errors, warnings, bodies = [], [], []
     items = _criteria_items(criteria)
     pass_only = bool(items)
@@ -722,17 +846,17 @@ def check_criteria(criteria):
             continue
         body, how = _split_check(item)
         bodies.append(body)
+        pairs.append((body, how))
         is_pass = bool(PASS_RE.search(body))
         pass_only = pass_only and is_pass
         if how is None and not is_pass:
-            errors.append(f"완료 기준 '{item}'에 확인 방법이 없습니다. 줄 끝에 '— 확인: …'을 붙여 무엇으로 확인할지 "
-                          f"쓰세요(기존 테스트 / 테스트 추가 / 사람이 직접)")
+            errors.append(f"완료 기준 '{item}'에 확인 방법이 없습니다. 줄 끝에 '{mark}'을 붙여 무엇으로 확인할지 "
+                          f"쓰세요({kinds})")
         elif how is not None and not how:
-            errors.append(f"완료 기준 '{item}'의 '확인:' 뒤가 비었습니다. 무엇으로 확인할지 쓰세요"
-                          f"(기존 테스트 / 테스트 추가 / 사람이 직접)")
-        elif how and re.match(r"사람이\s*직접", how.strip()) and DEV_TOOL_RE.search(how):
+            errors.append(f"완료 기준 '{item}'의 '{'check:' if lang == 'en' else '확인:'}' 뒤가 비었습니다. 무엇으로 확인할지 쓰세요({kinds})")
+        elif how and MANUAL_RE.match(how.strip()) and DEV_TOOL_RE.search(how):
             warnings.append(f"완료 기준 '{body}'의 확인 방법에 개발 도구({DEV_TOOL_RE.search(how).group(0)})가 있습니다. "
-                            f"'사람이 직접'은 사용자가 화면에서 할 수 있는 일로 쓰세요")
+                            f"'{'manual' if lang == 'en' else '사람이 직접'}'은 사용자가 화면에서 할 수 있는 일로 쓰세요")
         plain = _strip_quotes(body)
         strong = ph._matches(UNOBSERVABLE_STRONG, QUANTITY_ABOVE_RE.sub(" ", plain))
         weak = ph._matches(UNOBSERVABLE_WEAK, plain)
@@ -743,23 +867,79 @@ def check_criteria(criteria):
                           f"눈으로 볼 결과(보이는 문구, 통과하는 명령, 돌려받는 값)로 바꾸세요")
         elif weak:
             warnings.append(f"완료 기준 '{body}'의 '{', '.join(weak)}'는 기준이 흐립니다. 가능하면 관찰할 결과로 바꾸세요")
+    warnings += check_check_methods(pairs, lang)
     if pass_only:
         warnings.append("완료 기준이 검증 명령 통과뿐입니다. 다 된 뒤 사용자가 보게 될 결과를 한 줄 이상 쓰세요")
     return errors, warnings, bodies
+
+
+# 버튼을 "누를 수 있게"만 하고 누른 뒤 무엇이 보이는지는 없는 완료 기준 (k2 "결제 버튼 회색임"에서 나온 실패)
+CAN_PRESS_RE = re.compile(r"(누를\s*수\s*있|눌린다|눌러진다|클릭할\s*수\s*있|활성화)|(?i:clickable|can\s+be\s+(pressed|clicked|tapped)|is\s+enabled|becomes?\s+enabled)")
+AFTER_PRESS_RE = re.compile(r"(누르면|눌렀을\s*때|누른\s*(뒤|다음|후)|클릭하면|탭하면)|(?i:(when|after|on)\s+(pressing|clicking|tapping|pressed|clicked|tapped)|"
+                            r"pressing\s+(it|the)|clicking\s+(it|the)|tapping\s+(it|the))")
+
+
+# 속도 기준 — "지금보다 빨리"를 사람이 견주어 보는 것뿐이면 끝이 없다 (e6, k3)
+SPEED_RE = re.compile(r"빨리|빨라|빠르게|느리지\s*않|오래\s*걸리지\s*않|(?i:faster|quicker|quickly|no\s+longer\s+slow)")
+# 확인이 typecheck·lint뿐이면 화면에서 보이는 동작은 확인하지 못한다 (e8: 런타임 에러를 typecheck로)
+STATIC_ONLY_RE = re.compile(r"^\s*((pnpm|npm|yarn|bun)\s+(run\s+)?)?(typecheck|type-check|lint|tsc(\s+--noEmit)?|eslint\s*\S*|"
+                            r"flutter\s+analyze|dart\s+analyze|cargo\s+clippy|go\s+vet\s*\S*|mypy|ruff)(\s*(실행|통과|passes))?\s*$", re.I)
+
+
+def check_check_methods(items, lang="ko"):
+    """완료 기준의 확인 방법 △: 속도를 사람 눈으로만 견줌, 동작을 정적 검사로만 확인"""
+    out = []
+    speed = [(b, h) for b, h in items if h and SPEED_RE.search(b)]
+    tested = [h for _, h in items if h and not MANUAL_RE.match(h.strip())]
+    if speed and all(MANUAL_RE.match(h.strip()) for _, h in speed) and not tested:
+        out.append("속도 기준이 '지금보다 빨리'를 사람이 견주어 보는 것뿐입니다. 사용자가 몇 초인지 모르면 끝이 없습니다. "
+                   "수치를 지어내지 말고 화면에서 견줄 수 있는 끝(예: 항목이 많아도 몇 개일 때와 비슷하게 뜬다)을 쓰고, "
+                   "원인을 고쳤는지는 테스트로 확인할 기준을 따로 두세요")
+    for b, h in items:
+        if h and STATIC_ONLY_RE.match(h.split("(")[0]) and not PASS_RE.search(b):
+            out.append(f"완료 기준 '{b}'의 확인이 '{h.strip()}'뿐입니다. 타입 검사·린트는 실행 중에 보이는 동작을 확인하지 못합니다. "
+                       f"그 경우를 검사하는 테스트나 사람이 직접 해 보는 방법으로 쓰세요")
+    return out
+
+
+def check_en_constraints(constraint, lang):
+    """영어 프롬프트의 제약에 번역 없는 한국어 문장이 있으면 △ (n1·n4·k6)"""
+    if lang != "en":
+        return []
+    bad = [i for i in _items(constraint) if re.search(r"[가-힣]", i) and len(re.findall(r"[A-Za-z]{2,}", re.sub(r"\S*[./]\S*|(?<![A-Za-z])[A-Z]{2,}(?![a-z])", " ", i))) < 2]
+    if not bad:
+        return []
+    return [f"영어 프롬프트의 제약에 번역 없는 한국어가 있습니다('{bad[0][:40]}'). 원문 뒤에 영어 뜻을 괄호로 붙이세요"
+            f"(예: AGENTS.md — 새 의존성을 추가하지 않는다 (no new dependencies))"]
+
+
+BUTTON_RE = re.compile(r"버튼|(?i:button)")      # 설정을 켜는 것("다크 모드가 활성화")은 버튼을 누르는 일이 아니다
+
+
+def check_press_outcome(bodies, lang="ko"):
+    """누를 수 있게 하는 기준만 있고 누른 뒤의 결과 기준이 없으면 △"""
+    press = [b for b in bodies if CAN_PRESS_RE.search(b) and BUTTON_RE.search(b)]
+    if press and not any(AFTER_PRESS_RE.search(b) for b in bodies):
+        return ["완료 기준에 버튼을 누를 수 있게 하는 것만 있고, 누른 뒤 무엇이 보이는지가 없습니다. 다 고쳐도 눌리기만 하고 아무 일도 "
+                "일어나지 않을 수 있습니다. 누른 뒤의 모습이 요청에 없으면 프롬프트를 보여 주지 말고 그것을 물으세요"]
+    return []
 
 
 def _norm_space(text):
     return " ".join(text.split())
 
 
-def check_rules(rules):
-    """작업 규칙 칸에 SKILL.md 형식의 여섯 문장이 모두 그대로 있는지. 줄을 더한 것은 괜찮다"""
+def check_rules(rules, lang="ko"):
+    """작업 규칙 칸에 SKILL.md 형식의 여섯 문장(한국어 또는 영어 한 벌)이 모두 그대로 있는지. 줄을 더한 것은 괜찮다"""
     have = {_norm_space(BULLET_RE.sub("", l)) for l in rules.splitlines() if l.strip()}
-    missing = [r for r in ph.WORK_RULES if _norm_space(r) not in have]
-    if not missing:
+    sets = {"ko": ph.WORK_RULES, "en": ph.WORK_RULES_EN}
+    missing = {k: [r for r in v if _norm_space(r) not in have] for k, v in sets.items()}
+    if not missing["ko"] or not missing["en"]:
         return []
-    return [f"작업 규칙이 형식과 다릅니다(빠지거나 바뀐 줄 {len(missing)}개, 예: '{missing[0][:25]}…'). "
-            f"SKILL.md 형식의 여섯 줄을 그대로 쓰세요"]
+    miss = missing[lang]
+    where = "SKILL.md '영어 요청일 때' 형식" if lang == "en" else "SKILL.md 형식"
+    return [f"작업 규칙이 형식과 다릅니다(빠지거나 바뀐 줄 {len(miss)}개, 예: '{miss[0][:25]}…'). "
+            f"{where}의 여섯 줄을 그대로 쓰세요"]
 
 
 def _code_marks(text):
@@ -777,14 +957,15 @@ def _code_marks(text):
 
 def _from_request(item, request):
     """'요청 — …' 제약이 요청 원문에 있는 말인지. '요청'으로 시작하지 않는 항목은 True"""
-    m = re.match(r"\s*요청\s*[—\-:：]\s*", item)
+    m = re.match(r"\s*(요청|(?i:request))\s*[—\-:：]\s*", item)
     if not m:
         return True
     words = re.findall(r"[가-힣A-Za-z0-9]{2,}", item[m.end():])
     if not words:
         return True
     low = request.lower()
-    hits = sum(1 for w in words if w[:2].lower() in low)
+    # 한국어는 어미가 바뀌므로 앞 2글자로 본다. 영어는 앞 2글자면 거의 늘 맞으므로 앞 4글자로 본다
+    hits = sum(1 for w in words if (w[:2] if re.search(r"[가-힣]", w) else w[:4]).lower() in low)
     return hits / len(words) >= REQUEST_WORD_MIN_RATIO
 
 
@@ -917,17 +1098,19 @@ def _unknown_apis(text, root, request=""):
 
 def lint_one(prompt, root):
     errors, warnings = [], []
-    f, variants = parse(prompt)
+    lang = prompt_lang(prompt)
+    f, variants = parse(prompt, lang)
 
     for name, raw in variants:
-        warnings.append(f"칸 이름 '{raw.split(':')[0].strip()}'을(를) 표준 이름 '{name}:'으로 쓰세요")
+        warnings.append(f"칸 이름 '{raw.split(':')[0].strip()}'을(를) 표준 이름 '{_disp(name, lang)}:'으로 쓰세요")
 
     for name in REQUIRED:
         if name not in f:
-            errors.append(f"'{name}:' 칸이 없습니다")
+            errors.append(f"'{_disp(name, lang)}:' 칸이 없습니다")
         elif not f[name].strip() or _is_placeholder(f[name]):
-            errors.append(f"'{name}:' 칸이 비었거나 템플릿 자리표시자가 남아 있습니다"
-                          + (" (쓸 것이 없으면 '없음'이라고 쓰세요)" if name in ("제약", "가정") else ""))
+            none = "none" if lang == "en" else "없음"
+            errors.append(f"'{_disp(name, lang)}:' 칸이 비었거나 템플릿 자리표시자가 남아 있습니다"
+                          + (f" (쓸 것이 없으면 '{none}'이라고 쓰세요)" if name in ("제약", "가정") else ""))
 
     goal = f.get("목표", "")
     if len(goal) > MAX_GOAL_LEN:
@@ -935,33 +1118,35 @@ def lint_one(prompt, root):
 
     target = f.get("대상", "")
     if target and not _is_placeholder(target):
-        e, w = check_target(target, root)
+        e, w = check_target(target, root, lang)
         errors += e
         warnings += w
 
     verify = f.get("검증", "")
     if verify and not _is_placeholder(verify):
-        e, w = check_verify(verify, target, root)
+        e, w = check_verify(verify, target, root, lang)
         errors += e
         warnings += w
 
     criteria = f.get("완료 기준", "")
     bodies = []
     if criteria and not _is_placeholder(criteria):
-        e, w, bodies = check_criteria(criteria)
+        e, w, bodies = check_criteria(criteria, lang)
         errors += e
         warnings += w
+        warnings += check_press_outcome(bodies, lang)
         if TEST_ADD_RE.search(criteria) and target and not _has_test_path(target):
             warnings.append("완료 기준의 확인에 '테스트를 추가'가 있는데 대상에 테스트 파일이 없습니다. "
-                            "테스트를 넣을 파일 경로를 대상에 적으세요(없는 파일이면 뒤에 '(새 파일)')")
+                            f"테스트를 넣을 파일 경로를 대상에 적으세요(없는 파일이면 뒤에 '{'(new file)' if lang == 'en' else '(새 파일)'}')")
 
-    vague = ph._matches(ph.VAGUE_PATTERNS, _strip_quotes(goal + "\n" + "\n".join(bodies)))
+    vague = ph._matches(ph.VAGUE_PATTERNS + (ph.VAGUE_PATTERNS_EN if lang == "en" else []),
+                        _strip_quotes(goal + "\n" + "\n".join(bodies)))
     if vague:
         warnings.append(f"모호한 표현이 남아 있습니다: {', '.join(vague)}")
 
     rules = f.get("작업 규칙", "")
     if rules.strip():
-        errors += check_rules(rules)
+        errors += check_rules(rules, lang)
 
     n_assume = _count_assumptions(f.get("가정", ""))
     if n_assume > MAX_ASSUMPTIONS:
@@ -979,7 +1164,8 @@ def lint_one(prompt, root):
         if code:
             warnings.append(f"상황에 코드 표기({', '.join(code)})가 있습니다. 상황은 사용자가 쓰는 말로 쓰고 "
                             f"파일·함수 이름은 목표·대상·참고에 쓰세요")
-        terms = ph._matches(TECH_TERMS, _strip_quotes(situation))
+        terms = [t for t in ph._matches(TECH_TERMS + SERVICE_TERMS, _strip_quotes(situation))
+                 if t.lower() not in f.get("요청 원문", "").lower()]
         if terms:
             warnings.append(f"상황에 개발 용어({', '.join(terms)})가 있습니다. 화면에서 보이는 일로 바꾸세요")
 
@@ -1006,6 +1192,7 @@ def lint_one(prompt, root):
 
     constraint = f.get("제약", "")
     if constraint and not _is_placeholder(constraint) and not NONE_MARK.match(constraint):
+        warnings += check_en_constraints(constraint, lang)
         for item in _items(constraint):
             left = [x for x in CONSTRAINT_PLACEHOLDERS if x in item]
             if left:
@@ -1018,13 +1205,94 @@ def lint_one(prompt, root):
             if f.get("요청 원문") and not _from_request(item, f["요청 원문"]):
                 warnings.append(f"제약 '{item}'은(는) 요청 원문에서 찾을 수 없습니다. 사용자가 한 말이 아니면 가정으로 옮기세요")
 
-    # 작업 규칙의 고정 문장("커밋·push…")은 위험 작업 요청이 아니므로 빼고 본다
-    danger = ph._matches(ph.DANGER_PATTERNS, "\n".join(v for k, v in f.items() if k != "작업 규칙"))
+    warnings += check_cues(f)
+
+    # 무엇을 할지 말하는 칸만 본다. 작업 규칙의 고정 문장("커밋·push…"), 저장소 규칙을 옮긴 제약("커밋 메시지는 한국어로"),
+    # 파일 이름이 든 대상·참고("삭제 버튼"), 가정은 위험 작업 요청이 아니다 (평가 163회에서 이 △ 11번이 거의 이런 소음이었다)
+    danger = ph._matches(ph.DANGER_PATTERNS, "\n".join(f.get(k, "") for k in ("요청 원문", "목표", "완료 기준", "상황")))
     if danger:
         warnings.append(f"위험 작업 표현이 있습니다({', '.join(danger)}). 키워드 기준이므로, 그 작업을 실제로 "
                         f"실행하는 프롬프트일 때만 사용자에게 작업 이름을 들어 승인받으세요")
 
-    return {"fields": f, "errors": errors, "warnings": warnings}
+    return {"fields": f, "errors": errors, "warnings": warnings, "lang": lang}
+
+
+# 답(프롬프트 밖의 말)의 마지막 줄 (SKILL.md 5단계, 영어는 '영어 요청일 때')
+CLOSING = {"ko": "맞으면 이 프롬프트를 그대로 쓰시면 됩니다. 제가 잘못 이해한 곳이 있으면 말씀해 주세요.",
+           "en": "If this looks right, use the prompt as is. Tell me if I misunderstood anything."}
+# 사용자에게 점검 과정을 이야기하는 말 (규칙 4)
+PROCESS_RE = re.compile(r"(?<![A-Za-z])(lint|linter|prompt_lint|prompt_helper)(?![A-Za-z])|린트|보조\s*스크립트|"
+                        r"점검\s*(을|도|결과|했|해\s*보|통과)|\d\s*단계(?!\s*인증)|the\s+checker|ran\s+the\s+check", re.I)
+BLOCK_RE = re.compile(r"```[^\n]*\n(.*?)```", re.S)
+ANSWER_BLOCK_MIN_FIELDS = 3      # 서로 다른 칸이 이만큼 있는 코드 블록만 프롬프트로 본다 (사용자 로그 블록의 "Target: ES2020" 등은 아니다)
+
+
+def split_answer(text):
+    """(프롬프트 글, 프롬프트 밖의 답 글 또는 None). 코드 블록 안에 칸이 있으면 그 블록만 프롬프트로 본다.
+    코드 블록이 없거나 칸이 든 블록이 없으면 글 전체가 프롬프트다(답 점검 없음)"""
+    blocks = []
+    for b in BLOCK_RE.findall(text or ""):
+        lang = prompt_lang(b)
+        if len({x[0] for x in (_label(l, lang) for l in b.splitlines()) if x}) >= ANSWER_BLOCK_MIN_FIELDS:
+            blocks.append(b)
+    if not blocks:
+        return text, None
+    outside = BLOCK_RE.sub("\n", text)
+    return "\n".join(blocks), (outside if outside.strip() else None)
+
+
+def check_answer(outside, lang, request=""):
+    """프롬프트 밖의 답(사용자가 읽는 말) △: 첫 줄·마지막 줄 문구, 코드 표기, 개발 용어, 점검 과정 이야기"""
+    warnings = []
+    def norm(x):
+        x = x.replace("’", "'").replace("‘", "'")
+        return _norm_space(x.strip().strip("*").strip().strip('"“”').strip("*").strip())
+    outside = "\n".join(l for l in outside.splitlines() if not PROMPT_HEADER_RE.match(l.strip().strip("*").strip()))
+    lines = [norm(l) for l in outside.splitlines() if l.strip()]
+    if not lines:
+        return warnings
+    first = PHRASES[lang]["understood"]
+    if not lines[0].startswith(first):
+        warnings.append(f"답의 첫 줄이 '{first}'가 아닙니다('{lines[0][:30]}'). 그 앞에 점검 결과나 진행 이야기를 쓰지 마세요")
+    if lines[-1] != _norm_space(CLOSING[lang]):
+        warnings.append(f"답의 마지막 줄을 '{CLOSING[lang]}'로 쓰세요")
+    # 사용자가 붙여 넣은 말(에러 문구 등)을 백틱으로 인용한 것은 사용자의 말이므로 뺀다
+    plain = re.sub(r"`([^`\n]+)`", lambda m: " " if m.group(1).strip() in request else m.group(0), outside)
+    ticks = [t for t in re.findall(r"`([^`\n]+)`", plain)][:3]
+    # 1/2 같은 번호, and/or 같은 영어 낱말 사이 슬래시는 코드 표기가 아니다
+    code = ticks + [c for c in _code_marks(plain) if c != "`" and not re.fullmatch(r"\d+/\d+|[A-Za-z]+/[A-Za-z]+", c)]
+    code = list(dict.fromkeys(code))[:3]
+    if code:
+        warnings.append(f"답(프롬프트 밖)에 코드 표기({', '.join(code)})가 있습니다. 사용자에게 보이는 말은 화면에서 보이는 일로 쓰고 "
+                        f"코드 이름은 프롬프트 안에만 쓰세요")
+    low = request.lower()
+    terms = [t for t in ph._matches(QUESTION_TERMS, _strip_quotes(plain)) if t.lower() not in low]   # 사용자가 쓴 말은 뺀다
+    terms += [m.group(0) for m in SERVER_TERM_RE.finditer(_strip_quotes(plain))
+              if m.group(0).lower() not in low and m.group(0) not in terms][:2]
+    if terms:
+        warnings.append(f"답(프롬프트 밖)에 개발 용어({', '.join(terms)})가 있습니다. 사용자가 맞다, 아니다를 답할 수 있게 평소 말로 바꾸세요")
+    proc = PROCESS_RE.search(plain)
+    if proc and proc.group(0).lower() not in low:
+        warnings.append(f"답에 점검 과정 이야기('{proc.group(0)}')가 있습니다. 사용자에게는 점검 이야기를 하지 않습니다")
+    return warnings
+
+
+def check_cues(fields):
+    """요청 원문에 가리키는 말·끝이 없는 표현·새로 만드는 요청이 있는데 되묻지 않은 프롬프트 △.
+    되물어 받은 답은 요청 원문에 ' / '로 이어 붙으므로, ' / '가 없으면 묻지 않은 것이다"""
+    req = fields.get("요청 원문", "")
+    if not req or " / " in req:
+        return []
+    a = ph.analyze_request(req)
+    out = []
+    if a["new_feature"]:
+        out.append(f"요청이 새로 만드는 요청({', '.join(a['new_feature'])})인데 되묻지 않았습니다. 다 된 모습(무엇이 보이면 끝인지)이 "
+                   f"요청에 없으면 프롬프트를 보여 주지 말고 먼저 물으세요")
+    cues = a["pointers"] + a["open_ended"]
+    if cues and _count_assumptions(fields.get("가정", "")) == 0:
+        out.append(f"요청에 '{', '.join(cues)}'가 있는데 되묻지도 않았고 가정도 없습니다. 요청의 다른 말과 저장소로 정했다면 "
+                   f"무엇으로 봤는지 가정에 적고, 정할 수 없으면 먼저 물으세요")
+    return out
 
 
 def check_question(text):
@@ -1040,20 +1308,26 @@ def check_question(text):
     terms = ph._matches(QUESTION_TERMS, _strip_quotes(text))
     if terms:
         warnings.append(f"질문에 개발 용어({', '.join(terms)})가 있습니다. 사용자가 답할 수 있게 화면에서 보이는 말로 바꾸세요")
-    has_choices = (re.search(r"\(\s*예\s*[:：]", text) or any(BULLET_RE.match(l) for l in text.splitlines())
+    has_choices = (re.search(r"\(\s*(예\s*[:：]|(?i:e\.\s*g\.?|eg|for\s+example|ex\.?)(?![A-Za-z]))", text)
+                   or any(BULLET_RE.match(l) for l in text.splitlines())
                    or re.search(r"\S\s+/\s+\S", text))
     if not has_choices:
         warnings.append("보기가 없습니다. 저장소에서 찾은 화면·기능이나 예를 보기로 주세요")
     return warnings
 
 
-def question_to_text(warnings):
-    return "\n".join(["질문 점검"] + [f"  △ {w}" for w in warnings] + [QUESTION_LAST_WARN if warnings else QUESTION_LAST_OK])
+def question_to_text(warnings, lang="ko"):
+    last = (QUESTION_LAST_WARN if warnings else QUESTION_LAST_OK).format(ask=PHRASES[lang]["ask"])
+    return "\n".join(["질문 점검"] + [f"  △ {w}" for w in warnings] + [last])
 
 
 def lint(text, root):
+    """프롬프트만 넣어도 되고, 보여 줄 답 전체(프롬프트는 코드 블록 안)를 넣으면 프롬프트 밖의 말도 점검한다"""
     root = Path(root).resolve()
-    return {"root": str(root), "prompts": [lint_one(p, root) for p in split_prompts(text)]}
+    prompt_text, outside = split_answer(text)
+    prompts = [lint_one(p, root) for p in split_prompts(prompt_text)]
+    answer = check_answer(outside, prompts[0]["lang"], prompts[0]["fields"].get("요청 원문", "")) if outside and prompts else []
+    return {"root": str(root), "prompts": prompts, "answer_warnings": answer}
 
 
 def to_text(result):
@@ -1069,13 +1343,20 @@ def to_text(result):
         out.append(f"{head}판정: {state}")
         out += [f"  ✗ {e}" for e in r["errors"]]
         out += [f"  △ {w}" for w in r["warnings"]]
+    if result.get("answer_warnings"):
+        out.append("답(프롬프트 밖의 말)")
+        out += [f"  △ {w}" for w in result["answer_warnings"]]
+    words = PHRASES[result["prompts"][0].get("lang", "ko")] if result["prompts"] else PHRASES["ko"]
     if total_err:
         out.append("→ ✗를 고친 뒤 다시 점검하세요. 점검은 모두 3번까지만 합니다. "
-                   "3번째에도 ✗가 남으면 다시 돌리지 말고, 무엇을 확인하지 못했는지를 답의 '확인하지 못한 것'에 평소 말로 쓰세요")
+                   f"3번째에도 ✗가 남으면 다시 돌리지 말고, 무엇을 확인하지 못했는지를 답의 '{words['unverified']}'에 평소 말로 쓰세요")
     else:
-        out.append("→ 점검 끝. 사용자에게는 점검 이야기를 하지 말고 '이렇게 이해했습니다'로 시작하는 답을 바로 쓰세요")
+        out.append(f"→ 점검 끝. 보내기 전에 상황 칸을 한 번 더 읽으세요. 사용자가 말하지 않았는데 코드를 읽고 짐작한 증상"
+                   f"(화면이 멈춘다, 많을수록 느리다 등)이 사실처럼 들어 있으면 가정으로 옮깁니다")
+        out.append(f"→ 고칠 것이 있으면 말없이 고친 답을 바로 쓰세요. 다음 글의 첫 줄은 '{words['understood']}'입니다. "
+                   f"그 앞에 '경고에 따라 …하겠습니다', '…를 뺐습니다' 같은 말을 한 줄도 쓰지 않습니다")
     if any(w.startswith("검증") for r in result["prompts"] for w in r["warnings"]):
-        out.append("→ '검증'으로 시작하는 △를 고치지 못했으면 무엇을 확인하지 못했는지를 답의 '확인하지 못한 것'에 평소 말로 쓰세요")
+        out.append(f"→ '검증'으로 시작하는 △를 고치지 못했으면 무엇을 확인하지 못했는지를 답의 '{words['unverified']}'에 평소 말로 쓰세요")
     return "\n".join(out)
 
 
@@ -1104,9 +1385,9 @@ def main(argv):
         if not text.strip():
             sys.stderr.write("[prompt_lint] 점검할 질문이 없습니다\n")
             return 2
-        print(question_to_text(check_question(text)))
+        print(question_to_text(check_question(text), text_lang(text)))
         return 0
-    if not split_prompts(text):
+    if not split_prompts(split_answer(text)[0]):
         print("점검할 프롬프트가 없습니다 — '요청 원문: ...', '목표: ...'처럼 '칸 이름:' 형식으로 다시 쓰고 점검하세요")
         return 2
     root = ph.find_root(explicit_root)

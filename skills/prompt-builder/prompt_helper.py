@@ -19,7 +19,7 @@
   PROMPT_BUILDER_EOF
 
   python3 prompt_helper.py scan --text "로그인 버그 고쳐 줘"   # 짧은 요청은 인자로도 가능
-  python3 prompt_helper.py template
+  python3 prompt_helper.py template [--en]    # --en: 영어 요청용 형식
 
 종료 코드: 0 정상, 2 입력 오류(빈 요청, 없는 루트 등)
 """
@@ -48,7 +48,10 @@ TASK_VERBS = [
     r"옮기", r"옮겨", r"이전", r"마이그레이션", r"적용", r"연동", r"붙여", r"넣어", r"막아",
     r"검토", r"리뷰", r"분석", r"조사", r"정리", r"해결", r"처리", r"생성", r"올려", r"배포",
     r"봐\s*줘", r"봐\s*주", r"띄우", r"띄워", r"반영",
-    L + r"(fix|add|implement|update|refactor|write|create|remove|migrate|review)",
+    L + r"(fix|add|implement|update|refactor|write|create|remove|migrate|review|change|make|build|improve|"
+        r"move|rename|delete|clean\s+up|optimi[sz]e|speed\s+up|support|show|hide|handle|look\s+(at|into)|"
+        r"investigate|debug|check|set\s+up|hook\s+up|wire\s+up|integrate|replace|redo|tweak|push|deploy|commit|"
+        r"merge|release|publish)" + R,
 ]
 
 FIELDS = {
@@ -60,6 +63,8 @@ FIELDS = {
             r"대상\s*[:：]", r"범위\s*[:：]", r"파일", r"폴더", r"디렉터리", r"모듈",
             r"클래스", r"함수", r"메서드", r"화면", r"페이지", r"컴포넌트", r"엔드포인트", L + r"API" + R,
             r"\d+\s*장", r"\d+\.\d+\s*절",
+            L + r"(files?|folders?|director(y|ies)|modules?|class(es)?|functions?|methods?|screens?|pages?|"
+                r"components?|endpoints?|targets?)" + R,
         ],
     },
     "완료 기준": {
@@ -68,6 +73,8 @@ FIELDS = {
             r"완료\s*기준", r"완료\s*조건", r"성공\s*기준", r"기대\s*결과", r"결과물", r"산출물",
             r"되면\s*(완료|끝)", r"하면\s*(완료|끝)", r"끝나면", r"통과하면", r"돼야", r"되어야",
             r"보여야", r"나와야", r"acceptance", r"done\s*when",
+            L + r"(definition\s+of\s+done|expected\s+(result|behavio(u)?r|output)|should\s+(show|display|appear|"
+                r"return|see|be\s+(shown|visible|able))|so\s+that)" + R,
         ],
     },
     "검증": {
@@ -77,6 +84,7 @@ FIELDS = {
             r"analyze", r"lint", r"pytest", r"npm\s+run", r"gradlew",
             r"(flutter|dart)\s+(analyze|test|run|format|fix|build)" + R, r"검증", r"확인\s*방법",
             r"실행해\s*보", r"돌려\s*보", L + r"CI" + R,
+            L + r"(tests?|verify|verif(y|ied|ication)|run\s+the\s+tests|typecheck)" + R,
         ],
     },
     "제약": {
@@ -84,6 +92,9 @@ FIELDS = {
         "패턴": [
             r"제약", r"하지\s*마", r"하지\s*말", r"금지", r"건드리지", r"바꾸지", r"유지(?!보수)",
             r"만\s*수정", r"제외", r"말고", r"없이", L + r"don'?t" + R,
+            L + r"(do\s+not\s+(change|touch|edit|modify|remove|add)|don'?t\s+(change|touch|edit|modify|remove|add)|"
+                r"must\s+not|never\s+(change|touch|edit|modify)|only\s+(change|touch|edit)|except|avoid|leave\s+\S+(\s+\S+)?\s+(alone|as\s+is)|"
+                r"keep\s+\S+(\s+\S+)?\s+(as\s+is|unchanged|the\s+same|intact))" + R,
         ],
     },
 }
@@ -93,17 +104,44 @@ VAGUE_PATTERNS = [
     r"전부\s*다", r"다\s*해\s*줘", r"웬만하면", r"느낌", r"그거", r"저번(에|처럼)", r"지난번",
 ]
 
+# ── 영어 요청용 (요청의 대부분이 영어일 때만 쓴다 — 한국어 요청에 섞인 "Add to cart", "Something went wrong" 같은
+#    화면 문구에 걸리지 않게) ──
+VAGUE_PATTERNS_EN = [
+    L + r"(whatever|somehow|nicely|as\s+you\s+see\s+fit|you\s+decide|up\s+to\s+you|"
+        r"and\s+so\s+on|etc|kind\s+of|sort\s+of|the\s+usual|like\s+(last\s+time|before)|everything)" + R,
+]
+
 # 가리키는 말 — 무엇을 가리키는지 요청에 없는 말 (요청의 다른 말로 알 수 없으면 묻고, 저장소에서 찾은 문제가 그것이라고 짐작하지 않는다)
 POINTER_PATTERNS = ["(?<![가-힣])" + p for p in [     # 앞 글자가 한글이면 낱말 안이다 ("빈 칸이거나")
     r"이거", r"이것", r"그거", r"그것", r"저거", r"저것", r"여기", r"거기", r"저기",
     r"뭐가", r"뭔가", r"아까", r"저번(에|처럼)", r"지난번",
 ]]
 
+_EN_AUX = (r"(is|isn'?t|was|wasn'?t|are|aren'?t|does|doesn'?t|did|didn'?t|won'?t|can'?t|keeps|seems|looks|broke|"
+           r"stopped|thing|stuff|one)")
+_SENT = r"(^|[.!?]\s+)"          # 문장 첫머리
+POINTER_PATTERNS_EN = [
+    # this/these/those는 뒤에 이름이 오면("this page") 가리키는 대상이 있으므로 문장 끝이나 동사 앞에서만 잡는다.
+    # that은 이름 뒤에서 관계사로 많이 쓰이므로("notes that are pinned") 문장 첫머리와 동사 뒤에서만 잡는다
+    L + r"(this|these|those)" + R + r"(?=\s*($|[.,!?;:)]|" + _EN_AUX + R + r"))",
+    _SENT + r"that" + R + r"(?=\s*($|[.,!?;:)]|" + _EN_AUX + R + r"))",
+    L + r"(fix|check|look\s+at|change|update|handle|redo|debug|solve|sort\s+out)\s+(that|this)(?=\s*($|[.,!?;:)]))",
+    # it은 고치라는 동사 바로 뒤나 문장 첫머리에서만 ("make it faster"처럼 앞말을 받는 it은 요청 안에서 풀린다)
+    L + r"(fix|check|look\s+at|change|update|handle|redo|debug|solve|sort\s+out)\s+it" + R,
+    r"(^|[.!?]\s+)it" + R + r"(?!['’]s\s+(a|an|the)\s)",
+    L + r"(something|somewhere|the\s+thing|stuff|here|earlier|last\s+time|like\s+before|the\s+other\s+day)" + R,
+]
+
 # 끝이 없는 표현 — 어디까지 하면 끝인지 없는 말 (범위와 끝낼 조건을 먼저 좁힌다)
 OPEN_ENDED_PATTERNS = [
     r"예쁘게", r"이쁘게", r"깔끔하게", r"보기\s*좋게", r"좋게", r"편하게", r"빠르게",
     r"느려", r"느린", r"느림", r"느리", r"개선", r"최적화", r"정리", r"다듬", r"손봐",
-    r"리팩터", r"리팩토링", r"알아서", r"적당히", r"잘\s*좀",
+    r"리팩터", r"리팩토링", r"알아서", r"적당히", r"잘\s*좀", r"답답",
+]
+OPEN_ENDED_PATTERNS_EN = [
+    L + r"(nicer|prettier|pretty|cleaner|clean\s+up|tidy(\s+up)?|polish|better|easier|faster|quicker|smoother|"
+        r"slow|slower|laggy|sluggish|improve|optimi[sz]e|refactor|modernize|look\s+good|user[\s\-]friendly|"
+        r"whatever|as\s+you\s+see\s+fit|up\s+to\s+you)" + R,
 ]
 
 # 새로 만드는 요청 — 없던 것을 만들라는 말. 다 된 모습은 사용자만 안다 (요청에 없으면 묻는다)
@@ -114,6 +152,15 @@ NEW_FEATURE_PATTERNS = [
     r"(만들어|붙여|넣어|달아)(?=\s*($|[.!?~]))",
     r"(만들어|붙여|넣어|달아|짜)" + _ASK,
 ]
+# 그 문장에 고장을 말하는 낱말이 있으면 첫머리 동사는 이름이다 ("Build fails on CI", "Add button doesn't work")
+_NOT_BROKEN = r"(?![^.!?\n]*" + L + r"(fail\w*|crash\w*|doesn'?t|does\s+not|isn'?t|is\s+not|won'?t|broke\w*|errors?|stopped|not\s+working|disappear\w*))"
+NEW_FEATURE_PATTERNS_EN = [
+    # 요청 꼴일 때만 ("I added X but..."처럼 과거형 버그 설명은 아니다). make는 "make a/an/new"만 (make it faster는 끝이 없는 표현)
+    r"(" + _SENT + _NOT_BROKEN + r"|" + L + r"(please|pls|can\s+you|could\s+you|would\s+you|i\s+(want|need|'d\s+like)\s+(you\s+)?to|"
+        r"we\s+(want|need)\s+to|let'?s|need\s+to|want\s+to)\s+)"
+        r"(add|build|create|implement|integrate|introduce|support|set\s+up|hook\s+up|wire\s+up|make\s+(a|an|new))" + R,
+    L + r"(i|we)\s+(want|need|'d\s+like)\s+(a|an|some)(\s+new)?(?=\s+[a-z])",
+]
 
 # 위험 작업 — 되돌리기 어렵거나 저장소 밖에 영향을 주는 것.
 # SKILL.md 4단계의 위험 작업 목록과 맞춰 둔다 (테스트로 확인).
@@ -123,6 +170,7 @@ DANGER_PATTERNS = [
     r"배포", L + r"deploy", L + r"prod(uction)?" + R, r"프로덕션", r"운영\s*(서버|DB|환경|에|으로|반영)",
     r"머지", L + r"merge" + R, r"커밋", L + r"commit" + R, L + r"PR" + R, r"풀\s*리퀘스트",
     r"릴리스", r"릴리즈", L + r"release" + R, L + r"publish" + R, r"마이그레이션", L + r"migrat",
+    L + r"(ship\s+(it|to)|go\s+live|wipe|erase)" + R,
 ]
 
 # 한 프롬프트에 담기 많은 작업 기준 — 넘으면 프롬프트를 나누라고 알린다
@@ -148,6 +196,26 @@ PROJECT_MARKERS = ("package.json", "pubspec.yaml", "build.gradle", "build.gradle
 
 FLAGS = re.IGNORECASE | re.MULTILINE
 
+# 따옴표로 묶인 말(화면 문구·에러 메시지). 영어 낱말 안의 아포스트로피(don't)는 따옴표가 아니다
+QUOTED_RE = re.compile(r"(?<![A-Za-z])'(?:[^'\n]|(?<=[A-Za-z])'(?=[A-Za-z]))*'(?![A-Za-z])|\"[^\"\n]*\"|`[^`\n]*`|‘[^’\n]*’|“[^”\n]*”|「[^」\n]*」")
+
+
+# 한국어 서술어 끝 ("떠요", "뭐야", "고쳐", "해줘", "이상함", "안 돼", "느려"). 화면 이름("장바구니", "결제")은 여기에 걸리지 않는다
+KO_PREDICATE_RE = re.compile(r"(요|다|줘|봐|와|워|래|해|돼|야|어|아|여|려|쳐|져|음|함|임|네|냐|까|죠|지|셈)[.,!?~…]*$")
+
+
+def request_lang(text):
+    """요청의 언어. 따옴표 안 문구와 경로·URL을 뺀 낱말 가운데 영어로만 된 낱말이 한글이 든 낱말보다 많으면 'en'"""
+    words = QUOTED_RE.sub(" ", URL_RE.sub(" ", text or "")).split()
+    words = [w for w in words if not re.search(r"[./\\]\w", w)]
+    ko = [w for w in words if re.search(r"[가-힣]", w)]
+    en = sum(1 for w in words if re.fullmatch(r"\(?[A-Za-z][A-Za-z'’\-]*[.,!?;:)]*", w))
+    # 문장을 맺는 말(서술어)의 언어를 따른다. 한국어 요청에 영어 에러 문구를 붙여 넣거나("TypeError: … 이거 뭐야"),
+    # 영어 요청에 한국어 화면 이름을 섞는("the 장바구니 page is broken") 일이 흔하기 때문이다
+    if any(KO_PREDICATE_RE.search(w) for w in ko):
+        return "ko"
+    return "en" if en > len(ko) else "ko"
+
 
 def _any(patterns, text):
     return any(re.search(p, text, FLAGS) for p in patterns)
@@ -169,14 +237,18 @@ def analyze_request(text):
     present = [n for n in FIELDS if _any(FIELDS[n]["패턴"], text)]
     missing = [n for n in FIELDS if n not in present]
     numbered = len(re.findall(r"^\s*(\d+[.)]|[-*•])\s+", text, re.MULTILINE))
+    lang = request_lang(text)
+    en = lang == "en"
+    cues = QUOTED_RE.sub(" ", text)          # 인용한 화면 문구는 단서로 보지 않는다
     return {
+        "lang": lang,
         "is_task": _any(TASK_VERBS, text),
         "present_fields": present,
         "missing_fields": missing,
-        "pointers": _matches(POINTER_PATTERNS, text),
-        "open_ended": _matches(OPEN_ENDED_PATTERNS, text),
-        "new_feature": _matches(NEW_FEATURE_PATTERNS, text),
-        "vague": _matches(VAGUE_PATTERNS, text),
+        "pointers": _matches(POINTER_PATTERNS + (POINTER_PATTERNS_EN if en else []), cues),
+        "open_ended": _matches(OPEN_ENDED_PATTERNS + (OPEN_ENDED_PATTERNS_EN if en else []), cues),
+        "new_feature": _matches(NEW_FEATURE_PATTERNS + (NEW_FEATURE_PATTERNS_EN if en else []), cues),
+        "vague": _matches(VAGUE_PATTERNS + (VAGUE_PATTERNS_EN if en else []), cues),
         "danger": _matches(DANGER_PATTERNS, text),
         "too_big": numbered > MAX_NUMBERED_ITEMS or raw_length > MAX_LENGTH,
         "numbered_items": numbered,
@@ -547,8 +619,33 @@ TEMPLATE = """요청 원문: (사용자가 쓴 말 그대로 — 되물어 받�
 작업 규칙:
 """ + "\n".join("  - " + rule for rule in WORK_RULES)
 
+# 영어 요청일 때의 작업 규칙 — WORK_RULES와 같은 뜻의 여섯 문장. SKILL.md '영어 요청일 때'와 글자 그대로 같다 (테스트로 확인)
+WORK_RULES_EN = (
+    "Before changing anything, read the target files and related code yourself and confirm the cause or the current structure. Do not change code you have not read.",
+    "Change only what is needed to meet the done criteria. Do not clean up, refactor, or add features the request did not ask for.",
+    "When finished, check each done criterion with the method in its 'check' and actually run the verify command. Do not bend values just to make tests pass.",
+    "Report results per done criterion: how you checked, the command you ran, and the result. If you could not check a criterion yourself, say so and write what the user can try.",
+    "If you need to change something outside the targets, or an assumption looks wrong, stop and ask.",
+    "Commit, push, open a PR, deploy, or delete only when the user approves that action by name.",
+)
+
+# 영어 형식 — SKILL.md '영어 요청일 때' 코드 블록과 글자 그대로 같다 (테스트로 확인)
+TEMPLATE_EN = """Original request: (the user's exact words — append answers to follow-up questions with / )
+Situation: (in the user's everyday words — where, doing what, what happens now, and what should happen)
+Goal: (what to do, in one sentence)
+Targets: (file or module paths that actually exist)
+Done when:
+  - (what the user will see) — check: (how this criterion is checked)
+  - (result 2) — check: (how to check)
+Verify: (the command to actually run)
+Constraints: (what must be respected — with its source)
+Assumptions: (what was decided because the request did not say — needs user confirmation)
+References: (code or docs worth reading first)
+Work rules:
+""" + "\n".join("  - " + rule for rule in WORK_RULES_EN)
+
 # SKILL.md 1단계가 이 줄 이름들을 그대로 언급한다 (테스트로 확인)
-LABELS = ("저장소 루트", "요청에 있는 항목", "요청에 빠진 항목", "가리키는 말", "끝이 없는 표현", "새로 만드는 요청", "모호한 표현",
+LABELS = ("저장소 루트", "요청 언어", "요청에 있는 항목", "요청에 빠진 항목", "가리키는 말", "끝이 없는 표현", "새로 만드는 요청", "모호한 표현",
           "위험 작업 표현", "작업이 큼", "경로", "검증 명령 후보")
 
 
@@ -556,6 +653,8 @@ def to_text(r):
     out = []
     root_note = "" if r["root_is_git"] else "  ⚠ git 저장소 루트가 아님 — 위치가 맞는지 확인"
     out.append(f"저장소 루트: {r['root']}{root_note}")
+    if r.get("lang") == "en":
+        out.append("요청 언어: 영어  (SKILL.md '영어 요청일 때'의 형식과 문구로 쓴다)")
     out.append(f"요청에 있는 항목: {', '.join(r['present_fields']) or '없음'}  (키워드 기준, 확정 아님)")
     out.append(f"요청에 빠진 항목: {', '.join(r['missing_fields']) or '없음'}")
     if r["pointers"]:
@@ -596,7 +695,7 @@ def main(argv):
             stream.reconfigure(encoding="utf-8", errors="replace")
     mode, args = argv[1], list(argv[2:])
     if mode == "template":
-        print(TEMPLATE)
+        print(TEMPLATE_EN if "--en" in args else TEMPLATE)
         return 0
     if mode != "scan":
         return _fail(f"알 수 없는 모드: {mode}")
