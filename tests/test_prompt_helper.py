@@ -96,6 +96,99 @@ class AnalyzeRequest(unittest.TestCase):
             with self.subTest(t=t):
                 self.assertEqual(ph.analyze_request(t)["danger"], [])
 
+    def test_pointers(self):
+        for t, word in [("이거 버그났어", "이거"), ("뭐가 안 보여", "뭐가"), ("저번처럼 해 줘", "저번처럼"),
+                        ("여기 글자가 깨져", "여기"), ("아까 그것 다시", "아까")]:
+            with self.subTest(t=t):
+                self.assertIn(word, ph.analyze_request(t)["pointers"])
+        self.assertEqual(ph.analyze_request("로그인 화면에서 비밀번호 틀리면 앱이 꺼져")["pointers"], [])
+
+    def test_open_ended(self):
+        for t, word in [("화면 좀 예쁘게 해줘", "예쁘게"), ("검색이 느려", "느려"), ("코드 정리해 줘", "정리"),
+                        ("보기 좋게 바꿔 줘", "보기 좋게"), ("글 쓰는 화면 좀 편하게 해 줘", "편하게")]:
+            with self.subTest(t=t):
+                self.assertIn(word, ph.analyze_request(t)["open_ended"])
+        self.assertEqual(ph.analyze_request("로그인 버그 고쳐 줘")["open_ended"], [])
+
+    def test_new_feature(self):
+        for t, word in [("결제 붙여줘", "붙여줘"), ("로그아웃 버튼 추가해줘", "추가해"), ("다크모드 추가 좀", "추가 좀"),
+                        ("검색 기능 만들어 주세요", "만들어 주세요"), ("알림 구현해줘", "구현해"),
+                        ("테스트 좀 짜줘", "짜줘"), ("로그아웃 버튼 추가", "추가"),
+                        ("로그인 고쳐 줘\n로그아웃 버튼 추가\n끝", "추가")]:
+            with self.subTest(t=t):
+                self.assertIn(word, ph.analyze_request(t)["new_feature"])
+        for t in ["장바구니에 추가했는데 숫자가 안 보여", "비번 틀리게 넣어도 아무것도 안 떠요", "상품을 추가하면 오류나요",
+                  "연결이 안 돼", "짜증나게 느려"]:
+            with self.subTest(t=t):
+                self.assertEqual(ph.analyze_request(t)["new_feature"], [])
+
+    def test_new_feature_needs_request_shape(self):
+        for t in ["와이파이 연결해도 로그인이 안 돼", "구현해 놓은 검색이 안 돼", "결제 연동 필요 없어"]:
+            with self.subTest(t=t):
+                self.assertEqual(ph.analyze_request(t)["new_feature"], [])
+        for t in ["생성해 줘", "추가하고 싶어", "알림 구현해야 해", "푸시 연동 부탁"]:
+            with self.subTest(t=t):
+                self.assertTrue(ph.analyze_request(t)["new_feature"])
+
+    def test_pointer_inside_word(self):
+        self.assertEqual(ph.analyze_request("빈 칸이거나 공백이면 오류")["pointers"], [])
+        for t, word in [("이거 버그났어", "이거"), ("근데 이거", "이거"), ("뭐가 안 보여", "뭐가")]:
+            with self.subTest(t=t):
+                self.assertIn(word, ph.analyze_request(t)["pointers"])
+
+    def test_long_words_are_fast(self):
+        import time
+        d, root = make_repo({})
+        with d:
+            t0 = time.time()
+            for text in ["이거 에러나: " + "A" * 50000, "a@" + "b." * 20000, "http://" + "a" * 60000]:
+                r = ph.analyze_request(text)
+                ph.check_paths(text, root)
+            self.assertLess(time.time() - t0, 2)
+            self.assertTrue(ph.analyze_request("가 " + "A" * 5000)["too_big"])     # 긴 덩어리를 빼도 길이는 센다
+
+    def test_nfd_file_names(self):
+        import unicodedata
+        d, root = make_repo({unicodedata.normalize("NFD", "문서/설치.md"): "x"})
+        with d:
+            rows = ph.check_paths("설치.md 읽어 줘", root)
+            self.assertTrue(rows and rows[0]["exists"])
+            self.assertTrue(ph.check_paths(unicodedata.normalize("NFD", "문서/설치.md"), root)[0]["exists"])
+
+    def test_new_feature_commands(self):
+        for t in ["버튼 추가해", "검색 기능 구현해", "로그인 구현해.", "엑셀 내보내기 추가 필요", "공유 붙여", "다크모드 추가해야 해",
+                  "결제 붙여줘", "로그아웃 버튼 추가해줘", "다크모드 추가 좀", "검색 기능 만들어 주세요", "알림 구현해줘",
+                  "테스트 좀 짜줘", "로그아웃 버튼 추가", "생성해 줘", "추가하고 싶어"]:
+            with self.subTest(t=t):
+                self.assertTrue(ph.analyze_request(t)["new_feature"], t)
+        for t in ["와이파이 연결해도 로그인이 안 돼", "구현해 놓은 검색이 안 돼", "결제 연동 필요 없어",
+                  "장바구니에 추가했는데 숫자가 안 보여", "비번 틀리게 넣어도 아무것도 안 떠요", "상품을 추가하면 오류나요",
+                  "연결이 안 돼", "짜증나게 느려", "추가해서 써 봤는데 안 돼", "붙여넣기가 안 돼", "추가해 봤는데 안 돼"]:
+            with self.subTest(t=t):
+                self.assertEqual(ph.analyze_request(t)["new_feature"], [], t)
+
+    def test_new_feature_false_positives_3(self):
+        for t in ["와이파이 연결해야 하는데 안 돼", "추가해 주신 버튼이 안 눌려", "구현해 둔 검색이 안 돼", "구현해 뒀는데 안 돼"]:
+            with self.subTest(t=t):
+                self.assertEqual(ph.analyze_request(t)["new_feature"], [], t)
+        for t in ["다크모드 추가해야 해", "추가해 주세요", "추가해줘"]:
+            with self.subTest(t=t):
+                self.assertTrue(ph.analyze_request(t)["new_feature"], t)
+
+    def test_framework_route_paths(self):
+        files = {"app/orders/[id]/page.tsx": "", "app/(shop)/cart/page.tsx": "", "app/[...slug]/page.tsx": "",
+                 "app/@modal/login/page.tsx": "", "routes/users.$id.tsx": ""}
+        d, root = make_repo(files)
+        with d:
+            for f in files:
+                with self.subTest(f=f):
+                    rows = ph.check_paths(f"{f} 고쳐 줘", root)
+                    self.assertEqual([(r["mention"], r["exists"]) for r in rows], [(f, True)])
+                    out = run_cli("scan", "--text", "--root", str(root), stdin=f"{f} 고쳐 줘").stdout
+                    self.assertIn(f"경로 '{f}': 있음", out)
+            rows = ph.check_paths("app/orders/[id]/pgae.tsx", root)
+            self.assertEqual([(r["mention"], r["exists"]) for r in rows], [("app/orders/[id]/pgae.tsx", False)])
+
     def test_too_big(self):
         text = "\n".join(f"{i}. 기능 {i} 추가" for i in range(1, 8))
         self.assertTrue(ph.analyze_request(text)["too_big"])
@@ -165,6 +258,45 @@ class Paths(unittest.TestCase):
         d, root = make_repo({f"m{i}/index.ts": "" for i in range(8)})
         with d:
             self.assertEqual(len(ph.check_paths("index.ts 고쳐 줘", root)[0]["found"]), ph.MAX_PATH_MATCHES)
+
+    SHAPELESS = {".gitignore": "", "build.gradle": "", "gradle.properties": "", "go.mod": "",
+                 "src/a.ts": "", "Dockerfile.dev": ""}
+
+    def test_existing_names_without_path_shape(self):
+        # 점 파일·낯선 확장자·최상위 폴더도 저장소에 그대로 있으면 경로로 본다
+        d, root = make_repo(self.SHAPELESS)
+        with d:
+            for text, name in [("build.gradle 고쳐 줘", "build.gradle"), ("src/ 아래 전부 정리", "src/"),
+                               ("go.mod 버전 올려 줘", "go.mod"), ("gradle.properties에 값 추가", "gradle.properties")]:
+                with self.subTest(text=text):
+                    by = {p["mention"]: p for p in ph.check_paths(text, root)}
+                    self.assertIn(name, by)
+                    self.assertTrue(by[name]["exists"])
+                    self.assertEqual(by[name]["found"], [name])
+
+    def test_no_duplicate_mentions_across_sources(self):
+        d, root = make_repo(self.SHAPELESS)
+        with d:
+            ms = [p["mention"] for p in ph.check_paths(".gitignore에 .env 추가해 줘", root)]
+            self.assertEqual(ms, [".gitignore"])
+
+    def test_longer_dockerfile_names_not_split(self):
+        d, root = make_repo({**self.SHAPELESS, "docker/Dockerfile": ""})
+        with d:
+            r = ph.check_paths("Dockerfile.dev 고쳐 줘", root)
+            self.assertEqual([p["mention"] for p in r], ["Dockerfile.dev"])
+            self.assertTrue(r[0]["exists"])
+            ms = [p["mention"] for p in ph.check_paths("docker/Dockerfile 고쳐 줘", root)]
+            self.assertEqual(ms, ["docker/Dockerfile"])
+            for text in ["Dockerfile이랑 봐 줘", "Dockerfile.", "`Dockerfile` 확인"]:
+                with self.subTest(text=text):
+                    self.assertIn("Dockerfile", [p["mention"] for p in ph.check_paths(text, root)])
+
+    def test_shapeless_noise_is_not_path(self):
+        d, root = make_repo({})
+        with d:
+            text = "Node.js 버전 e.g. 3.32.8 올리고 response.data ./ 확인, ... 그리고 ok."
+            self.assertEqual(ph.check_paths(text, root), [])
 
 
 class VerifyCommands(unittest.TestCase):
@@ -293,10 +425,39 @@ class Cli(unittest.TestCase):
             self.assertIn("작업이 큼(", p.stdout)
             self.assertIn("자)", p.stdout)
 
+    def test_pointer_and_open_ended_lines(self):
+        d, root = make_repo({})
+        with d:
+            out = run_cli("scan", "--text", "--root", str(root), stdin="이거 화면 좀 예쁘게 해줘").stdout
+            self.assertIn("가리키는 말: 이거  (무엇을 가리키는지 요청에 없음 — 요청의 다른 말로 알 수 없으면 묻는다. 저장소에서 찾은 문제가 그것이라고 짐작하지 않는다)", out)
+            self.assertIn("끝이 없는 표현: 예쁘게  (어디까지 하면 끝인지 없음", out)
+            lines = out.splitlines()
+            self.assertLess(lines.index(next(l for l in lines if l.startswith("가리키는 말"))),
+                            lines.index(next(l for l in lines if l.startswith("끝이 없는 표현"))))
+            out = run_cli("scan", "--text", "--root", str(root), stdin="로그인 버그 고쳐 줘").stdout
+            self.assertNotIn("가리키는 말", out)
+            self.assertNotIn("끝이 없는 표현", out)
+
+    def test_new_feature_line(self):
+        d, root = make_repo({})
+        with d:
+            out = run_cli("scan", "--text", "--root", str(root), stdin="결제 붙여줘").stdout
+            self.assertIn("새로 만드는 요청: 붙여줘  (다 된 모습은 사용자만 안다 — 무엇이 보이면 끝인지 요청에 없으면 묻는다)", out)
+            out = run_cli("scan", "--text", "--root", str(root), stdin="이거 화면 좀 예쁘게 붙여줘").stdout
+            lines = out.splitlines()
+            self.assertLess(lines.index(next(l for l in lines if l.startswith("끝이 없는 표현"))),
+                            lines.index(next(l for l in lines if l.startswith("새로 만드는 요청"))))
+            out = run_cli("scan", "--text", "--root", str(root), stdin="로그인 버그 고쳐 줘").stdout
+            self.assertNotIn("새로 만드는 요청", out)
+        self.assertEqual(ph.LABELS.index("새로 만드는 요청"), ph.LABELS.index("끝이 없는 표현") + 1)
+
     def test_template(self):
         p = run_cli("template")
-        for k in ["목표:", "대상:", "완료 기준:", "검증:", "제약:", "가정:"]:
+        for k in ["요청 원문:", "상황:", "목표:", "대상:", "완료 기준:", "검증:", "제약:", "가정:", "작업 규칙:"]:
             self.assertIn(k, p.stdout)
+        self.assertIn("— 확인:", p.stdout)
+        for rule in ph.WORK_RULES:
+            self.assertIn("  - " + rule, p.stdout)
 
 
 class SkillContract(unittest.TestCase):
@@ -313,6 +474,21 @@ class SkillContract(unittest.TestCase):
 
     def test_template_matches_helper(self):
         self.assertIn(ph.TEMPLATE, SKILL_MD)
+
+    def test_work_rules_in_skill(self):
+        self.assertEqual(len(ph.WORK_RULES), 6)
+        for rule in ph.WORK_RULES:
+            self.assertIn(rule, SKILL_MD)
+        # 예시 프롬프트도 작업 규칙을 형식 그대로 쓴다
+        for b in re.findall(r"```\n(요청 원문:.*?)```", SKILL_MD, re.S):
+            for rule in ph.WORK_RULES:
+                self.assertIn("  - " + rule, b)
+
+    def test_find_uses_quit(self):
+        # 첫 결과에서 멈춘다 (| head -1은 find가 끝까지 돈다)
+        for b in re.findall(r"```bash\n(.*?)```", SKILL_MD, re.S):
+            self.assertIn("-print -quit", b)
+            self.assertNotIn("head -1", b)
 
     def test_output_labels_documented(self):
         for label in ph.LABELS:
@@ -331,8 +507,9 @@ class SkillContract(unittest.TestCase):
 
     def test_examples_follow_rules(self):
         # 예시 프롬프트가 출처 없는 제약을 지어내지 않는지
-        blocks = re.findall(r"```\n(목표:.*?)```", SKILL_MD, re.S)
-        self.assertGreaterEqual(len(blocks), 2)
+        blocks = [b for b in re.findall(r"```\n(요청 원문:.*?)```", SKILL_MD, re.S)
+                  if "(사용자가 쓴 말 그대로" not in b]          # 형식 자체는 제외
+        self.assertEqual(len(blocks), 2)
         for b in blocks:
             constraint = re.search(r"^제약:(.*)$", b, re.M).group(1)
             self.assertTrue("없음" in constraint or "—" in constraint, constraint)
